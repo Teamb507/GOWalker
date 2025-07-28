@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 字体配置
 config = {
     "font.family": 'Times New Roman',
     "font.size": 18,
@@ -10,18 +9,14 @@ config = {
 }
 plt.rcParams.update(config)
 
-# 柱宽
 bar_width = 0.22
 
-# 数据
 with open('./test/experiment1/result.csv', 'r') as f:
     lines = [float(line.strip()) for line in f.readlines()]
 
-# 原始时间数据
 cggraph_time = [311.169,47.4922,117.947,535.213,3000]
 gowalker_time = lines[0:5]
 
-# 转换为倍数（cggraph自身保持1）
 cggraph_bar = [1, 1, 1, 1, 1]
 lighttraffic_bar = [2.078424464,
                     2.058777947,
@@ -36,7 +31,6 @@ sowalker_bar = [2.329923611,
 gowalker_bar = [ cg /go for go, cg in zip(gowalker_time, cggraph_time)]
 dataset = ["TW", "FR", "UK", "YH", "K30"]
 
-# 横坐标起点
 x = np.arange(len(dataset))
 x1 = x - 1.5 * bar_width
 x2 = x - 0.5 * bar_width
@@ -45,7 +39,6 @@ x4 = x + 1.5 * bar_width
 
 fig, axes1 = plt.subplots(figsize=(8, 5))
 
-# 柱状图绘制
 lns1 = axes1.bar(x1, cggraph_bar, color='#ED7D31', width=bar_width,
                  label=r"$\mathrm{CGgraph}$", edgecolor='black')
 lns2 = axes1.bar(x2, lighttraffic_bar, color='#4672C4', width=bar_width,
@@ -55,17 +48,14 @@ lns3 = axes1.bar(x3, sowalker_bar, color='#70AD47', width=bar_width,
 lns4 = axes1.bar(x4, gowalker_bar, color='#C00000', width=bar_width,
                  label=r"$\mathrm{GOWalker}$", edgecolor='black')
 
-# x轴标签设置（居中）
 axes1.set_xticks(x)
 axes1.set_xticklabels(dataset, rotation=0)
 
-# y轴格式设置
 axes1.ticklabel_format(axis='y', style='sci', scilimits=(0, 0), useMathText=True)
 axes1.set_ylabel("Normalized Runtime")
 axes1.grid(True, axis='y', linestyle=':')
 axes1.set_ylim(0, 3.5)
 
-# 图例设置
 axes1.legend(handles=[lns1, lns2, lns3, lns4],
              prop={'size': 15},
              ncol=4,
@@ -75,6 +65,5 @@ axes1.legend(handles=[lns1, lns2, lns3, lns4],
              columnspacing=0.5,
              handletextpad=0.4)
 
-# 保存与显示
 plt.savefig("4-time-pr.svg", dpi=300, bbox_inches="tight")
 plt.show()

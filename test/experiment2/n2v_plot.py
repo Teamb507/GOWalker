@@ -32,9 +32,7 @@ with open('./test/experiment2/nopipeline.csv', 'r') as f:
         gpu_time.append(b)
         cpu_time.append(c)
 
-# 原始柱子高度
 total_bar = [1, 1, 1]
-# node2vec 拆分为三部分
 n2v_cpu = [t / c for c, t in zip(cpu_time, total_time)]
 n2v_gpu = [t / g for g, t in zip(gpu_time, total_time)]
 n2v_transfer = [t / s for s, t in zip(transfer_time, total_time)]
@@ -55,17 +53,12 @@ transfer_bar = ax.bar(x1, n2v_transfer, bottom=np.array(n2v_cpu)+np.array(n2v_gp
                       width=bar_width, edgecolor='black', color='#70AD47', label='Transfer')
 
 
-
-
-# 轴标签与网格
 ax.set_xticks(x)
 ax.set_xticklabels(dataset)
-# ax.set_xlabel("Dataset")
 ax.set_ylabel("Normalized Runtime")
 ax.set_ylim(0, 2.1)
 ax.grid(True, axis='y', linestyle=':', alpha=0.7)
 
-# 图例
 ax.legend(handles=[lns1, cpu_bar, gpu_bar, transfer_bar],
           loc='upper center', bbox_to_anchor=(0.5, 1.0), ncol=4,
           fontsize=15, columnspacing=0.6, handletextpad=0.6, labelspacing=0.15)
