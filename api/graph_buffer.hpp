@@ -27,7 +27,6 @@ public:
     {
         this->capacity = size;
         this->bsize = 0;
-        //this->array = (T *)malloc(size * sizeof(T));
         checkCudaError(cudaHostAlloc((void**)&(this->array), size * sizeof(T), cudaHostAllocMapped));
         this->next = NULL;
     }
@@ -36,7 +35,6 @@ public:
         if (capacity <= 0)
             return false;
         this->bsize = 0;
-        //this->array = (T *)malloc(capacity * sizeof(T));
         checkCudaError(cudaHostAlloc((void**)&(this->array), capacity * sizeof(T), cudaHostAllocMapped));
         this->next = NULL;
     }
@@ -115,7 +113,6 @@ public:
     }
     int push(vid_t pv, vid_t cv, bid_t pb, bid_t cb, hid_t hop)
     {
-        // 0 错误 1 正常插入 2 缓冲区满
         if (bsize >= capacity)
         {
             return 0;
@@ -139,9 +136,6 @@ public:
 
     T load(wid_t w)
     {
-        // if(w>=this->size())
-        //     return NULL;
-        // assert(w<this->size());
         graph_buffer<T>* p = this;
         while (w >= p->bsize)
         {

@@ -24,15 +24,14 @@ typedef float real_t;    /* edge weight */
 #define WALKER_ID_SIZE 36 /* walker id size */
 #define walkperthread 16
 #define sharedsize 1024
-// 定义算法类型
 typedef enum { node2vec, SOPR } AlgorithmType;
 void checkCudaError(const cudaError_t err)
 {
-   if (err != cudaSuccess)
-   {
-      std::cout << "cuda false:" << std::endl;
-      exit(EXIT_FAILURE); // 或者你可以选择抛出异常或执行其他错误处理
-   }
+    if (err != cudaSuccess)
+    {
+        std::cout << "cuda false:" << std::endl;
+        exit(EXIT_FAILURE);
+    }
 }
 enum WeightType
 {
@@ -81,21 +80,21 @@ public:
     uint64_t gpu_in_steps;
     uint64_t gpu_pass_steps;
     uint64_t cpu_allsteps;
-    uint64_t *cpu_steps;
-    std::vector<double> *thread_time;
-    gpu_test *h_gpu;
-    gpu_test *d_gpu;
-    std::vector<std::pair<eid_t,uint32_t>> IO_uti;
+    uint64_t* cpu_steps;
+    std::vector<double>* thread_time;
+    gpu_test* h_gpu;
+    gpu_test* d_gpu;
+    std::vector<std::pair<eid_t, uint32_t>> IO_uti;
     graph_test()
     {
         gpu_in_steps = 0;
         gpu_pass_steps = 0;
-        cpu_allsteps=0;
-        cpu_steps = (uint64_t *)malloc(sizeof(uint64_t) *omp_get_max_threads());
-        thread_time=(std::vector<double> *)malloc(sizeof(std::vector<double>) *omp_get_max_threads());
-        h_gpu=(gpu_test *)malloc(sizeof(gpu_test));
+        cpu_allsteps = 0;
+        cpu_steps = (uint64_t*)malloc(sizeof(uint64_t) * omp_get_max_threads());
+        thread_time = (std::vector<double> *)malloc(sizeof(std::vector<double>) * omp_get_max_threads());
+        h_gpu = (gpu_test*)malloc(sizeof(gpu_test));
         IO_uti.clear();
-        cudaMalloc((void **)&d_gpu, sizeof(gpu_test));
+        cudaMalloc((void**)&d_gpu, sizeof(gpu_test));
     }
     ~graph_test()
     {
@@ -105,7 +104,7 @@ public:
     {
         cudaMemcpy(&h_gpu->gpu_in_steps, &(d_gpu->gpu_in_steps), sizeof(uint32_t), cudaMemcpyDeviceToHost);
         cudaMemcpy(&h_gpu->gpu_pass_steps, &(d_gpu->gpu_pass_steps), sizeof(uint32_t), cudaMemcpyDeviceToHost);
-        cudaMemset(d_gpu,0,sizeof(gpu_test));
+        cudaMemset(d_gpu, 0, sizeof(gpu_test));
     }
     void aggregate_gpu()
     {
@@ -115,35 +114,35 @@ public:
     }
     void aggregate_cpu(int threadnum)
     {
-        for(int i=0;i<threadnum;i++)
+        for (int i = 0;i < threadnum;i++)
         {
-            cpu_allsteps+=cpu_steps[i];
+            cpu_allsteps += cpu_steps[i];
         }
     }
     void utilization_rate(eid_t edgenum)
     {
         aggregate_gpu();
-        if(edgenum == 0)
+        if (edgenum == 0)
         {
-            IO_uti[IO_uti.size()-1].second +=( h_gpu->gpu_in_steps + h_gpu->gpu_pass_steps);
+            IO_uti[IO_uti.size() - 1].second += (h_gpu->gpu_in_steps + h_gpu->gpu_pass_steps);
             return;
         }
-        IO_uti.push_back(std::make_pair(edgenum, h_gpu->gpu_in_steps+h_gpu->gpu_pass_steps));
+        IO_uti.push_back(std::make_pair(edgenum, h_gpu->gpu_in_steps + h_gpu->gpu_pass_steps));
     }
 };
 class gpu_block
 {
 public:
     bid_t blk;
-    eid_t *beg_pos;
-    vid_t *csr;
-    real_t *weights;
+    eid_t* beg_pos;
+    vid_t* csr;
+    real_t* weights;
 };
 class gpu_cache
 {
 public:
     bid_t ncblock;
-    gpu_block *cache_blocks;
+    gpu_block* cache_blocks;
 };
 class gpu_walks
 {
@@ -151,10 +150,10 @@ public:
     hid_t hops;
     wid_t nwalk;
     wid_t res_nwalk;
-    wid_t *walk_offset; // xinzeng
-    walker_t *walks;
-    walker_t *res_walks;
-    wid_t *block_offset;
+    wid_t* walk_offset; // xinzeng
+    walker_t* walks;
+    walker_t* res_walks;
+    wid_t* block_offset;
 };
 
 class gpu_graph_block
@@ -168,7 +167,7 @@ public:
 class gpu_graph
 {
 public:
-    gpu_graph_block *blocks;
+    gpu_graph_block* blocks;
     bid_t nblock;
 };
 
@@ -180,7 +179,7 @@ public:
     cudaStream_t back;
     gpu_stream()
     {
-        std::cout<<"Creating GPU streams..."<<std::endl;
+        std::cout << "Creating GPU streams..." << std::endl;
         cudaStreamCreate(&graph);
         cudaStreamCreate(&update);
         cudaStreamCreate(&back);

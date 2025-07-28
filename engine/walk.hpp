@@ -129,7 +129,6 @@ public:
         mtx.unlock();
         return 0;
     }
-    // device 0 cpu 1 gpu
     wid_t insert(bool device, walker_t* walks, wid_t numwalks, cudaStream_t stream)
     {
         wid_t load = 0;
@@ -151,7 +150,6 @@ public:
         {
             while (load < numwalks)
             {
-                //walker_t* array = (walker_t*)malloc(sizeof(walker_t) * cpu_batch);
                 walker_t* array = NULL;
                 checkCudaError(cudaHostAlloc((void**)&array, sizeof(walker_t) * cpu_batch, cudaHostAllocMapped));
                 wid_t batch = cpu_batch > (numwalks - load) ? (numwalks - load) : cpu_batch;
@@ -191,12 +189,10 @@ public:
     tid_t nthreads;
     std::mutex forbid_mtx;
     std::vector<bid_t> forbid;
-    graph_buffer<walker_t>* g_walks; // 需要传给gpu更新的游走
-    graph_buffer<walker_t>* c_walks; // 传给CPU更新的游走
-    // graph_buffer<walker_t> **block_walks;
+    graph_buffer<walker_t>* g_walks; 
+    graph_buffer<walker_t>* c_walks; 
     walk_block* block_walks;
     graph_buffer<walker_t>** cpu_walkbuffer;
-    // std::vector<wid_t> block_nmwalk;
     graph_block* global_blocks;
 
     graph_walk(graph_config& conf, graph_driver& driver, graph_block& blocks)
@@ -235,14 +231,12 @@ public:
         free(g_walks);
         free(c_walks);
     }
-    // 每次按batch大小整批插入到游走队列中//初始化游走时候使用
     wid_t gpuinsertbatchwalk(walker_t* gpuwalks, size_t numwalks, bid_t blk, cudaStream_t stream)
     {
         size_t load = 0;
         load += block_walks[blk].insert(1, gpuwalks, numwalks, stream);
         return load;
     }
-    // 初始化生成walks walkpersource>0时按照每个顶点walkpersource条生成否则随机生成numwalks条游走
     wid_t gpu_createwalk(size_t walkpersource, size_t numwalks, graph_config* conf, cudaStream_t stream)
     {
         walker_t* gpuwalks;
@@ -334,21 +328,19 @@ public:
     {
         return block_walks[blk].insert(0, cpuwalks, numwalks, 0);
     }
-    // 统计gpu的暂存区block_walks中的游走数量
     wid_t nblockwalks(bid_t blk)
     {
         wid_t walksum = 0;
         walksum = block_walks[blk].block_numwalks();
         return walksum;
     }
-    wid_t nwalks() // 返回所有块中的walk数
+    wid_t nwalks() 
     {
         wid_t walksum = 0;
         for (bid_t blk = 0; blk < totblocks; blk++)
         {
             wid_t num = this->nblockwalks(blk);
             walksum += num;
-            // std::cout << "block walknum:" << blk << "  :  " << num <<"  vers:"<<global_blocks->blocks[blk/nblocks].nverts<< std::endl;
         }
         return walksum;
     }
@@ -357,24 +349,6 @@ public:
         return this->nwalks() == 0;
     }
 
-    // 零拷贝阶段分配游走给gpu
-    // wid_t zerocopywalktogpu()
-    // {
-    //     if (g_walks != NULL)
-    //     {
-    //         std::cout << "last epoch update error!" << std::endl;
-    //     }
-    //     wid_t load = 0;
-    //     for (int blk = 0; blk < totblocks; blk++)
-    //     {
-    //         if (block_walks[blk].block_numwalks() > 0)
-    //         {
-    //             load += block_walks[blk].load(0, &g_walks);
-    //             break;
-    //         }
-    //     }
-    //     return load;
-    // }
     wid_t zerocopywalktogpu(bid_t blk)
     {
         if (g_walks != NULL)
@@ -432,7 +406,6 @@ public:
             checkCudaError(cudaMemcpyAsync(&gpu_buffer[offset + load], g_walks->array, sizeof(walker_t) * batch, cudaMemcpyHostToDevice, stream));
             checkCudaError(cudaStreamSynchronize(stream));
             load += batch;
-            //保存walk的空间全为锁页内存
             checkCudaError(cudaFreeHost(g_walks->array));
             free(g_walks);
             g_walks = NULL;
@@ -442,14 +415,11 @@ public:
 
     wid_t copy_back(gpu_walks* gpu_walkbuffer, graph_cache* cache, cudaStream_t stream, metrics& _m)
     {
-        // 处理上轮更新过的游走
         checkCudaError(cudaStreamSynchronize(stream));
         gpu_walks* cpu_walks = (gpu_walks*)malloc(sizeof(gpu_walks));
         checkCudaError(cudaMemcpyAsync(cpu_walks, gpu_walkbuffer, sizeof(gpu_walks), cudaMemcpyDeviceToHost, stream));
         wid_t* offset = (wid_t*)malloc(sizeof(wid_t) * (totblocks + 1));
         checkCudaError(cudaMemcpyAsync(offset, cpu_walks->block_offset, sizeof(wid_t) * (totblocks + 1), cudaMemcpyDeviceToHost, stream));
-        // 重置res_offfset
-        // 计算每个块的游走的位置
         wid_t* walknum = (wid_t*)malloc(sizeof(wid_t) * totblocks);
         wid_t p = 0;
         std::vector<bid_t> cached_walk_block;
@@ -469,7 +439,6 @@ public:
                     if (blk == cached_walk_block[pos])
                     {
                         pos++;
-                        // 调整符合驻留gpu的walk的位置，集中
                         if (walknum[blk] > 0)
                         {
                             checkCudaError(cudaMemcpyAsync(&cpu_walks->walks[p], &cpu_walks->walks[offset[blk]], sizeof(walker_t) * walknum[blk], cudaMemcpyDeviceToDevice, stream));
@@ -490,9 +459,7 @@ public:
     wid_t copywalker(gpu_walks* gpu_walkbuffer, wid_t nwalk, wid_t offset, graph_cache* cache, graph_config* conf, cudaStream_t stream, metrics& _m)
     {
         bid_t nblocks = nblocks;
-        // 处理上轮更新过的游走
         static gpu_walks* cpu_walks = (gpu_walks*)malloc(sizeof(gpu_walks));
-        // std::cout<<"1"<<std::endl;
         checkCudaError(cudaMemcpyAsync(cpu_walks, gpu_walkbuffer, sizeof(gpu_walks), cudaMemcpyDeviceToHost, stream));
         std::vector<bid_t> cached_walk_block;
         cached_walk_block = cache->walk_blocks;

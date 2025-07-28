@@ -25,8 +25,8 @@ int main(int argc, const char* argv[])
     cudaGetDeviceCount(&deviceCount);
     if (deviceCount > 1)
     {
-        cudaSetDevice(1); // 设置使用GPU1（索引从0开始）
-        std::cout << "Using GPU 1" << std::endl;
+        cudaSetDevice(0);
+        std::cout << "Using GPU 0" << std::endl;
     }
     assert(argc >= 2);
     set_argc(argc, argv);
@@ -54,7 +54,6 @@ int main(int argc, const char* argv[])
     bool sa = get_option_bool("sa");
     bool gpu_schedule = get_option_bool("gpu");
     bool cpu_schedule = get_option_bool("cpu");
-    bool cggraph = get_option_bool("cggraph");
     bool walkaware = get_option_bool("walkaware");
     if (help_info)
     {
@@ -100,7 +99,6 @@ int main(int argc, const char* argv[])
     {
         zero_threshold = blocksize_MB * (1024 * 1024) / 128 / 4 / 4;
         logstream(LOG_INFO) << "zero_threshold = " << zero_threshold << std::endl;
-        //zero_threshold = 100;
     }
     else
     {
@@ -131,7 +129,6 @@ int main(int argc, const char* argv[])
         zero_threshold,
         gpu_schedule,
         cpu_schedule,
-        cggraph,
         walkaware
     };
 
@@ -152,10 +149,6 @@ int main(int argc, const char* argv[])
     {
         m.set("cpu_schedule", 0);
     }
-    if (cggraph)
-    {
-        m.set("cggraph", 1);
-    }
     graph_block blocks(&conf);
     graph_driver driver(&conf, m);
     scheduler* walk_scheduler;
@@ -166,10 +159,7 @@ int main(int argc, const char* argv[])
     graph_cache g_cache(nmblocks, blocksize_MB * (1024 * 1024));
     graph_engine engine(cache, walk_mangager, driver, conf, m, g_cache, walk_scheduler);
     engine.prologue();
-    if (cggraph == true)
-        engine.cggraph_pipe_run();
-    else
-        engine.pipe_run();
+    engine.pipe_run();
     engine.epilogue();
     for (int i = 0; i < g_cache.ncblock; i++)
     {

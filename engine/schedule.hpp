@@ -41,19 +41,12 @@ protected:
 
 public:
   scheduler(metrics& m) : _m(m) {}
-  std::vector<bid_t> buckets; // 加载进入gpu中的块
+  std::vector<bid_t> buckets;
   std::vector<bid_t> cpu_blk;
-  virtual bool schedule(graph_config& conf, graph_cache& cache,
-    graph_driver& driver, graph_walk& walk_manager,
-    gpu_cache* g_cache, gpu_graph* g_graph,
-    graph_cache& c_cache, cudaStream_t cstream, metrics& _m,
-    cudaStream_t copy) {
+  virtual bool schedule(graph_config& conf, graph_cache& cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, graph_cache& c_cache, cudaStream_t cstream, metrics& _m, cudaStream_t copy) {
     return;
   }
-  virtual eid_t copyblocks(graph_cache& cache, graph_cache& c_cache,
-    graph_driver& driver, graph_walk& walk_manager,
-    gpu_cache* g_cache, gpu_graph* g_graph, int pos,
-    cudaStream_t copy) {
+  virtual eid_t copyblocks(graph_cache& cache, graph_cache& c_cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, int pos, cudaStream_t copy) {
     return;
   }
   virtual bid_t posblk(int pos) { return 0; }
@@ -66,25 +59,14 @@ class GOwalker_scheduler_t : public scheduler {
 public:
   std::vector<bid_t> bucket_sequences;
   size_t scheduleblocks = 0;
-  GOwalker_scheduler_t( metrics& m) : scheduler(m) {
+  GOwalker_scheduler_t(metrics& m) : scheduler(m) {
   }
 
-  GOwalker_scheduler_t(std::vector<bid_t> copybuckets, metrics& m): scheduler(m) {
+  GOwalker_scheduler_t(std::vector<bid_t> copybuckets, metrics& m) : scheduler(m) {
     buckets.resize(copybuckets.size());
     std::copy(copybuckets.begin(), copybuckets.end(), buckets.begin());
   }
 
-  int Combination(int n, int k) {
-    if (k < 0 || k > n) {
-      return 0;
-    }
-    int res = 1;
-    for (int i = 0; i < k; ++i) {
-      res *= (n - i);
-      res /= (i + 1);
-    }
-    return res;
-  }
   bool max_choose_blocks(graph_config& conf, graph_cache& cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, graph_cache& c_cache, metrics& _m)
   {
     _m.start_time("max_choose_blocks");
@@ -104,26 +86,26 @@ public:
       std::vector<std::pair<bid_t, size_t>> block_score;
       for (int i = 0;i < pre_cached.size();i++)
       {
-        size_t min=0xffffffff;
-        bid_t index=0;
-        size_t all=0;
+        size_t min = 0xffffffff;
+        bid_t index = 0;
+        size_t all = 0;
         for (int j = 0;j < cached.size();j++)
         {
           size_t score = walk_manager.block_walks[pre_cached[i] * nblocks + cached[j]].block_numwalks() + walk_manager.block_walks[cached[j] * nblocks + pre_cached[i]].block_numwalks();
-          all+=score;
-          if(score<min){
-            index=j;
-            min=score;
+          all += score;
+          if (score < min) {
+            index = j;
+            min = score;
           }
         }
-        block_score.push_back(std::make_pair(pre_cached[i] * nblocks + index, all-min));
+        block_score.push_back(std::make_pair(pre_cached[i] * nblocks + index, all - min));
       }
       std::sort(block_score.begin(), block_score.end(), [](const std::pair<bid_t, size_t>& a, const std::pair<bid_t, size_t>& b) { return a.second > b.second; });
       if (block_score[0].second > 0 && block_score[0].second > conf.zero_threshold)
       {
         bid_t choose_blk = block_score[0].first / nblocks;
         bid_t prev_index = block_score[0].first % nblocks;
-        buckets[prev_index]=choose_blk;
+        buckets[prev_index] = choose_blk;
         _m.stop_time("max_choose_blocks");
         return true;
       }
@@ -131,7 +113,6 @@ public:
     else
     {
       std::vector<std::pair<bid_t, size_t>> block_score;
-      //bid_t记录为要选择的块
       for (int i = 0;i < pre_cached.size();i++)
       {
         bid_t pre_choose = pre_cached[i];
@@ -171,10 +152,8 @@ public:
         cache.walk_blocks.push_back(blk);
       }
     }
-    // 看是否有空的
     for (int i = 0; i < cache.ncblock; i++) {
       if (cache.cache_blocks[i].block == NULL) {
-        // 加载新的块
         cache.cache_blocks[i].block = c_cache.cache_blocks[choosed].block;
         cache.cache_blocks[i].block->cache_index = i;
         cache.cache_blocks[i].block->status = ACTIVE;
@@ -188,24 +167,20 @@ public:
         return load;
       }
       else if (cache.cache_blocks[i].block->blk == choosed) {
-        // 如果块已经再显存中不要任何操作；
         return load;
       }
       else {
         cached.push_back(cache.cache_blocks[i].block->blk);
       }
     }
-    // 替换不在cache中的
     for (int i = 0; i < cache.ncblock; i++) {
       if (std::find(buckets.begin(), buckets.end(),
         cache.cache_blocks[i].block->blk) ==
-        buckets.end()) // 找到cache里面没有被选中的
+        buckets.end()) 
       {
-        // 无效旧块
         cache.cache_blocks[i].block->cache_index = c_cache.ncblock;
         cache.cache_blocks[i].block->status = INACTIVE;
         pipeline_gpugraph(g_graph, cache.cache_blocks[i].block, copy);
-        // 加载新的块
         cache.cache_blocks[i].block = c_cache.cache_blocks[choosed].block;
         cache.cache_blocks[i].block->cache_index = i;
         cache.cache_blocks[i].block->status = ACTIVE;
@@ -252,7 +227,7 @@ public:
           continue;
         if (std::find(buckets.begin(), buckets.end(), f) != buckets.end() && std::find(buckets.begin(), buckets.end(), t) != buckets.end())
         {
-          continue; // 这两个块都在gpu上
+          continue;
         }
         bid_t totblk = f * walk_manager.nblocks + t;
         if (walk_manager.nblockwalks(totblk) > 0)
@@ -298,7 +273,6 @@ public:
     if (cached.size() >= cache.ncblock)
     {
       std::vector<std::pair<bid_t, size_t>> block_score;
-      //bid_t 记录为pre_cahced*nblcoks+cached为使用pre
       for (int i = 0;i < pre_cached.size();i++)
       {
         for (int j = 0;j < cached.size();j++)
@@ -337,7 +311,6 @@ public:
     else
     {
       std::vector<std::pair<bid_t, size_t>> block_score;
-      //bid_t记录为要选择的块
       for (int i = 0;i < pre_cached.size();i++)
       {
         bid_t pre_choose = pre_cached[i];
@@ -362,49 +335,6 @@ public:
     return false;
   }
 
-  bool cggraph_choose(graph_config& conf, graph_cache& cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, graph_cache& c_cache, metrics& _m)
-  {
-    static int k = 0;
-    if (k > 0)
-    {
-      return true;
-    }
-    std::vector<std::pair<bid_t, float>> degs;
-    for (int i = 0;i < walk_manager.nblocks;i++)
-    {
-      degs.push_back(std::make_pair(i, walk_manager.global_blocks->blocks[i].nedges / walk_manager.global_blocks->blocks[i].nverts));
-    }
-    std::sort(degs.begin(), degs.end(), [](const auto& a, const auto& b) {return a.second > b.second; });
-    std::cout << "cggraph choose block :";
-    for (int i = 0;i < cache.ncblock;i++)
-    {
-      buckets.push_back(degs[i].first);
-      std::cout << "cggraph choose block " << degs[i].first << "  ";
-    }
-    std::cout << std::endl;
-    k++;
-    return true;
-  }
-
-  bool cpu_cggraph(graph_config& conf, graph_cache& cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, graph_cache& c_cache, metrics& _m)
-  {
-    cpu_blk.clear();
-    for (int i = 0;i < walk_manager.nblocks;i++)
-    {
-      for (int j = 0;j < walk_manager.nblocks;j++)
-      {
-        bid_t totblk = i * walk_manager.nblocks + j;
-        if (std::find(buckets.begin(), buckets.end(), i) != buckets.end() && std::find(buckets.begin(), buckets.end(), j) != buckets.end())
-          continue; // 这两个块都在gpu上
-        if (walk_manager.nblockwalks(totblk) > 0)
-        {
-          cpu_blk.push_back(totblk);
-        }
-      }
-    }
-    return true;
-  }
-
   bool schedule(graph_config& conf, graph_cache& cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, graph_cache& c_cache, cudaStream_t cstream, metrics& _m, cudaStream_t copy)
   {
     bool res = false;
@@ -412,12 +342,6 @@ public:
     {
       res = walkaware(conf, cache, driver, walk_manager, g_cache, g_graph, c_cache, _m);
       cpu_firstcol(conf, cache, driver, walk_manager, g_cache, g_graph, c_cache, _m);
-      return res;
-    }
-    if (conf.cggraph == true)
-    {
-      res = cggraph_choose(conf, cache, driver, walk_manager, g_cache, g_graph, c_cache, _m);
-      cpu_cggraph(conf, cache, driver, walk_manager, g_cache, g_graph, c_cache, _m);
       return res;
     }
     if (conf.gpu_schedule == true)

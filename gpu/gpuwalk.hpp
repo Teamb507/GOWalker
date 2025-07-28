@@ -25,12 +25,6 @@ __device__ double g_min(double a, double b)
 
 __device__ bool search(vid_t *begin, vid_t *end, vid_t v, int nedges)
 {
-    // for(int i=0;begin[i]!=*end;i++)
-    // {
-    //     if(begin[i]==v)
-    //         return true;
-    // }
-    // return false;
     int head = 0;
     int tail = nedges - 1;
     int i = 0;
@@ -121,7 +115,6 @@ __device__ void gpu_update(wid_t index, gpu_walks *g_walks, gpu_cache *g_cache, 
         }
         else
         {
-            // if(deg>=g_graph->blocks[cur_blk].nedges) return;
             real_t max_val = g_max(1.0 / p, g_max(1.0 / q, 1.0));
             real_t min_val = g_min(1.0 / p, g_min(1.0 / q, 1.0));
             bool accept = false;
@@ -156,7 +149,6 @@ __device__ void gpu_update(wid_t index, gpu_walks *g_walks, gpu_cache *g_cache, 
                         accept = true;
                 }
             }
-            // assert(rand_pos<deg);
             next_vertex = g_cache->cache_blocks[cur_index].csr[adj_head + rand_pos];
         }
         prev_vertex = cur_vertex;
@@ -379,7 +371,6 @@ __global__ void walkswap(gpu_walks *g_walks)
     }
 }
 
-// zerocopy gpu update
 __global__ void zerocopy_update(gpu_walks *g_walks, cache_block *d_map, gpu_graph *g_graph, real_t p, real_t q, bid_t nblocks, curandState *states, gpu_test *test)
 {
     curandState state = states[blockIdx.x * blockDim.x + threadIdx.x];
@@ -411,7 +402,6 @@ __global__ void zerocopy_update(gpu_walks *g_walks, cache_block *d_map, gpu_grap
             }
             else
             {
-                // if(deg>=g_graph->blocks[cur_blk].nedges) return;
                 real_t max_val = g_max(1.0 / p, g_max(1.0 / q, 1.0));
                 real_t min_val = g_min(1.0 / p, g_min(1.0 / q, 1.0));
                 bool accept = false;
@@ -442,7 +432,6 @@ __global__ void zerocopy_update(gpu_walks *g_walks, cache_block *d_map, gpu_grap
                             accept = true;
                     }
                 }
-                // assert(rand_pos<deg);
                 next_vertex = d_map[cur_blk].csr[adj_head + rand_pos];
             }
             prev_vertex = cur_vertex;
@@ -469,7 +458,6 @@ __global__ void zerocopy_update(gpu_walks *g_walks, cache_block *d_map, gpu_grap
     return;
 }
 
-// zerocopy gpu update
 __global__ void SOPR_zerocopy_update(gpu_walks *g_walks, cache_block *d_map, gpu_graph *g_graph, real_t alpha, bid_t nblocks, curandState *states, gpu_test *test)
 {
     curandState state = states[blockIdx.x * blockDim.x + threadIdx.x];

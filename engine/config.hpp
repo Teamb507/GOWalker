@@ -30,7 +30,6 @@ struct graph_config
     wid_t zero_threshold;
     bool gpu_schedule;
     bool cpu_schedule;
-    bool cggraph; // cpu-gpu hybrid
     bool walkaware;
 };
 
