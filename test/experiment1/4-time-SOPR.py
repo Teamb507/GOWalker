@@ -14,7 +14,7 @@ plt.rcParams.update(config)
 bar_width = 0.22
 
 # 数据
-with open('./result.csv', 'r') as f:
+with open('./test/experiment1/result.csv', 'r') as f:
     lines = [float(line.strip()) for line in f.readlines()]
 
 # 原始时间数据

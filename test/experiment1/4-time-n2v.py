@@ -14,9 +14,9 @@ plt.rcParams.update(config)
 bar_width = 0.22
 
 # 数据
-with open('./baseline.csv', 'r') as f:
+with open('./test/experiment1/baseline.csv', 'r') as f:
     baselines = [float(line.strip()) for line in f.readlines()]
-with open('./result.csv', 'r') as f:
+with open('./test/experiment1/result.csv', 'r') as f:
     lines = [float(line.strip()) for line in f.readlines()]
 
 # 原始时间数据
@@ -73,5 +73,5 @@ axes1.legend(handles=[lns1, lns2, lns3, lns4],
              handletextpad=0.4)
 
 # 保存与显示
-plt.savefig("4-time-n2v.svg", dpi=300, bbox_inches="tight")
+plt.savefig("./test/experiment1/4-time-n2v.svg", dpi=300, bbox_inches="tight")
 plt.show()

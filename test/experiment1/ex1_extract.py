@@ -39,18 +39,8 @@ def extract_all_times(file_content):
     return all_times
 
 def save_times_to_file(time_data, output_file='./test/experiment1/result.csv'):
-    """
-    将所有时间数据保存到CSV文件
-    
-    参数:
-    time_data (list): 包含所有数据块时间指标的列表
-    output_file (str): 输出文件名，默认为'result.csv'
-    """
     try:
         with open(output_file, 'w') as file:
-            # 写入表头
-            #file.write("Total_time\n")
-            # 写入每一行数据
             for total, gpu, cpu in time_data:
                 file.write(f"{total}\n")
         print(f"已成功将 {len(time_data)} 组数据写入 {output_file}")
@@ -75,11 +65,6 @@ if __name__ == "__main__":
             # 保存到文件
             save_times_to_file(all_times)
             
-            # 打印第一组数据示例
-            print("\n第一组数据示例:")
-            print(f"总时间: {all_times[0][0]}")
-            print(f"GPU时间: {all_times[0][1]}")
-            print(f"CPU时间: {all_times[0][2]}")
     
     except FileNotFoundError:
         print("错误：找不到metrics.txt文件，请确保文件在正确的路径下。")

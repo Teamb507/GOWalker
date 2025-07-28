@@ -18,14 +18,14 @@ plt.rcParams.update(config)
 
 bar_width = 0.22
 
-with open('./test/ex2/total.csv', 'r') as f:
+with open('./test/experiment2/total.csv', 'r') as f:
     totallines = [float(line.strip()) for line in f.readlines()]
 total_time = lines[0:3]
 transfer_time = []
 gpu_time = []
 cpu_time = []
 
-with open('./test/ex2/nopipeline.csv', 'r') as f:
+with open('./test/experiment2/nopipeline.csv', 'r') as f:
     for line in f:
         a, b, c = map(float, line.strip().split(','))
         transfer_time.append(a)
@@ -49,9 +49,9 @@ fig, ax = plt.subplots(figsize=(6, 4.5))
 lns1 = ax.bar(x2, total_bar, color='#C00000', width=bar_width,
               label="Total", edgecolor='black')
 
-cpu_bar = ax.bar(x1, n2v_cpu, width=bar_width, color='#4672C4', label="CPU", edgecolor='black')
-gpu_bar = ax.bar(x1, n2v_gpu, bottom=n2v_cpu, width=bar_width, color='#ED7D31', label="GPU", edgecolor='black')
-transfer_bar = ax.bar(x1, n2v_transfer, bottom=np.array(n2v_cpu)+np.array(n2v_gpu),
+cpu_bar = ax.bar(x1, sopr_cpu, width=bar_width, color='#4672C4', label="CPU", edgecolor='black')
+gpu_bar = ax.bar(x1, sopr_gpu, bottom=sopr_cpu, width=bar_width, color='#ED7D31', label="GPU", edgecolor='black')
+transfer_bar = ax.bar(x1, sopr_transfer, bottom=np.array(sopr_cpu)+np.array(sopr_gpu),
                       width=bar_width, edgecolor='black', color='#70AD47', label='Transfer')
 
 
@@ -71,5 +71,5 @@ ax.legend(handles=[lns1, cpu_bar, gpu_bar, transfer_bar],
           fontsize=15, columnspacing=0.6, handletextpad=0.6, labelspacing=0.15)
 
 plt.tight_layout()
-plt.savefig("4-pipeline-n2v.svg", dpi=300, bbox_inches="tight")
+plt.savefig("4-pipeline-pr.svg", dpi=300, bbox_inches="tight")
 plt.show()

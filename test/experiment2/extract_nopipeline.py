@@ -38,7 +38,7 @@ def extract_all_times(file_content):
     
     return all_times
 
-def save_times_to_file(time_data, output_file='./test/ex2/nopipeline.csv'):
+def save_times_to_file(time_data, output_file='./test/experiment2/nopipeline.csv'):
     """
     将所有时间数据保存到CSV文件
     
@@ -74,13 +74,6 @@ if __name__ == "__main__":
             
             # 保存到文件
             save_times_to_file(all_times)
-            
-            # 打印第一组数据示例
-            print("\n第一组数据示例:")
-            print(f"总时间: {all_times[0][0]}")
-            print(f"GPU时间: {all_times[0][1]}")
-            print(f"CPU时间: {all_times[0][2]}")
-    
     except FileNotFoundError:
         print("错误：找不到metrics.txt文件，请确保文件在正确的路径下。")
     except Exception as e:

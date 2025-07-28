@@ -34,7 +34,7 @@ def extract_all_times(file_content):
     
     return all_times
 
-def save_times_to_file(time_data, output_file='./test/ex2/total.csv'):
+def save_times_to_file(time_data, output_file='./test/experiment2/total.csv'):
     """
     将所有时间数据保存到CSV文件
     
