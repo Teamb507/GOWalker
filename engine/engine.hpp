@@ -437,7 +437,7 @@ public:
             }
             checkCudaError(cudaStreamSynchronize(stream->graph));//copy
             _m.start_time("1.3_GPU_update");
-            if (conf->algorithm == SOPR)
+            if (conf->algorithm == SOPR||conf->algorithm == SOSR)
                 SOPR_gpu_run << <conf->blockpergrid, conf->threadperblock, 0, stream->update >> > (g_walks[i % 2], g_cache, g_graph, conf->alpha, states, test->d_gpu);
             else
                 gpu_run << <conf->blockpergrid, conf->threadperblock, 0, stream->update >> > (g_walks[i % 2], g_cache, g_graph, conf->p, conf->q, states, test->d_gpu);
@@ -481,7 +481,7 @@ public:
                     if (walk_manager->g_walks == NULL)
                         break;
                 }
-                if (conf->algorithm == SOPR)
+                if (conf->algorithm == SOPR||conf->algorithm == SOSR)
                     SOPR_zerocopy_update << <conf->blockpergrid, conf->threadperblock, 0, stream->update >> > (g_walks[1], d_map, g_graph, conf->alpha, walk_manager->nblocks, states, test->d_gpu);
                 else
                     zerocopy_update << <conf->blockpergrid, conf->threadperblock, 0, stream->update >> > (g_walks[1], d_map, g_graph, conf->p, conf->q, walk_manager->nblocks, states, test->d_gpu);
@@ -504,7 +504,7 @@ public:
                     if (walk_manager->g_walks == NULL)
                         break;
                 }
-                if (conf->algorithm == SOPR)
+                if (conf->algorithm == SOPR||conf->algorithm == SOSR)
                     SOPR_zerocopy_update << <conf->blockpergrid, conf->threadperblock, 0, stream->back >> > (g_walks[0], d_map, g_graph, conf->alpha, walk_manager->nblocks, states, test->d_gpu);
                 else
                     zerocopy_update << <conf->blockpergrid, conf->threadperblock, 0, stream->back >> > (g_walks[0], d_map, g_graph, conf->p, conf->q, walk_manager->nblocks, states, test->d_gpu);
@@ -659,7 +659,7 @@ void walkjob(void* arg)
             steps += (uint64_t)engine->sidewalkupdate(walks[i], p, q, maxhop, seed, engine, tid);
         }
     }
-    else if (engine->conf->algorithm == SOPR)
+    else if (engine->conf->algorithm == SOPR|| engine->conf->algorithm == SOSR)
     {
         for (wid_t i = 0; i < walknum; i++)
         {

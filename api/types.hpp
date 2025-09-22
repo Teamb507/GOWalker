@@ -24,7 +24,7 @@ typedef float real_t;    /* edge weight */
 #define WALKER_ID_SIZE 36 /* walker id size */
 #define walkperthread 16
 #define sharedsize 1024
-typedef enum { node2vec, SOPR } AlgorithmType;
+typedef enum { node2vec, SOPR,SOSR } AlgorithmType;
 void checkCudaError(const cudaError_t err)
 {
     if (err != cudaSuccess)

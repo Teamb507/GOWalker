@@ -19,13 +19,13 @@
  * on the cache, such as swapin and swapout, schedule blocks.
  */
 
-/** block has four state
- *
- * `USING`      : the block is running
- * `USED`       : the block is finished runing, but still in memory
- * `ACTIVE`     : the block is in memroy, but not use
- * `INACTIVE`   : the block is in disk
- */
+ /** block has four state
+  *
+  * `USING`      : the block is running
+  * `USED`       : the block is finished runing, but still in memory
+  * `ACTIVE`     : the block is in memroy, but not use
+  * `INACTIVE`   : the block is in disk
+  */
 
 
 
@@ -36,7 +36,7 @@ public:
     vid_t start_vert, nverts; /* block start vertex and the number of vertex in block */
     eid_t start_edge, nedges; /* block start edge and the number of edges in this block */
 
-    block_state status; 
+    block_state status;
     block_t()
     {
         blk = cache_index = 0;
@@ -45,7 +45,7 @@ public:
         status = INACTIVE;
     }
 
-    block_t &operator=(const block_t &other)
+    block_t& operator=(const block_t& other)
     {
         if (this != &other)
         {
@@ -63,12 +63,12 @@ public:
 class cache_block
 {
 public:
-    block_t *block;
+    block_t* block;
     bool cudazerocopy;
-    eid_t *beg_pos;
-    vid_t *degree;
-    vid_t *csr;
-    real_t *weights;
+    eid_t* beg_pos;
+    vid_t* degree;
+    vid_t* csr;
+    real_t* weights;
 
     cache_block()
     {
@@ -77,7 +77,7 @@ public:
         degree = NULL;
         csr = NULL;
         weights = NULL;
-        cudazerocopy=false;
+        cudazerocopy = false;
     }
 
     ~cache_block()
@@ -93,40 +93,40 @@ public:
     }
     void cudaregister()
     {
-        if(!cudazerocopy)
+        if (!cudazerocopy)
         {
-            cudaHostRegister(block,sizeof(block_t),cudaHostRegisterMapped);
-            cudaHostRegister(beg_pos,sizeof(eid_t)*(block->nverts+1),cudaHostRegisterMapped);
-            cudaHostRegister(csr,sizeof(vid_t)*block->nedges,cudaHostRegisterMapped);
-            if(weights!=NULL)
-            cudaHostRegister(weights,sizeof(real_t)*block->nedges,cudaHostRegisterMapped); 
-            cudazerocopy=true;
+            cudaHostRegister(block, sizeof(block_t), cudaHostRegisterMapped);
+            cudaHostRegister(beg_pos, sizeof(eid_t) * (block->nverts + 1), cudaHostRegisterMapped);
+            cudaHostRegister(csr, sizeof(vid_t) * block->nedges, cudaHostRegisterMapped);
+            if (weights != NULL)
+                cudaHostRegister(weights, sizeof(real_t) * block->nedges, cudaHostRegisterMapped);
+            cudazerocopy = true;
         }
     }
-    void cudamalloc(bool weighted,size_t blocksize)
+    void cudamalloc(bool weighted, size_t blocksize)
     {
-       if(!cudazerocopy)
-       {    
-            if(beg_pos!=NULL)
+        if (!cudazerocopy)
+        {
+            if (beg_pos != NULL)
                 free(beg_pos);
-            if(csr!=NULL)
+            if (csr != NULL)
                 free(csr);
-            checkCudaError(cudaHostAlloc((void **)&beg_pos,blocksize,cudaHostAllocMapped));
-            checkCudaError(cudaHostAlloc((void **)&csr,blocksize,cudaHostAllocMapped));
-            if(weighted)
-            checkCudaError(cudaHostAlloc((void **)&weights,blocksize,cudaHostAllocMapped));
-            cudazerocopy=true;
+            checkCudaError(cudaHostAlloc((void**)&beg_pos, blocksize, cudaHostAllocMapped));
+            checkCudaError(cudaHostAlloc((void**)&csr, blocksize, cudaHostAllocMapped));
+            if (weighted)
+                checkCudaError(cudaHostAlloc((void**)&weights, blocksize, cudaHostAllocMapped));
+            cudazerocopy = true;
         }
     }
 };
 
-void swap(cache_block &cb1, cache_block &cb2)
+void swap(cache_block& cb1, cache_block& cb2)
 {
-    block_t *tblock = cb2.block;
-    eid_t *tbeg_pos = cb2.beg_pos;
-    vid_t *tdegree = cb2.degree;
-    vid_t *tcsr = cb2.csr;
-    real_t *tw = cb2.weights;
+    block_t* tblock = cb2.block;
+    eid_t* tbeg_pos = cb2.beg_pos;
+    vid_t* tdegree = cb2.degree;
+    vid_t* tcsr = cb2.csr;
+    real_t* tw = cb2.weights;
 
     cb2.block = cb1.block;
     cb2.beg_pos = cb1.beg_pos;
@@ -145,18 +145,19 @@ class graph_block
 {
 public:
     bid_t nblocks;
-    block_t *blocks;
+    block_t* blocks;
 
-    graph_block(graph_config *conf)
+    graph_block(graph_config* conf)
     {
         std::string vert_block_name = get_vert_blocks_name(conf->base_name, conf->blocksize);
         std::string edge_block_name = get_edge_blocks_name(conf->base_name, conf->blocksize);
 
         std::vector<vid_t> vblocks = load_graph_blocks<vid_t>(vert_block_name);
         std::vector<eid_t> eblocks = load_graph_blocks<eid_t>(edge_block_name);
-
+        eid_t maxedges = (eid_t)conf->blocksize / sizeof(vid_t);
+        vid_t maxverts = (vid_t)conf->blocksize / sizeof(eid_t);
         nblocks = vblocks.size() - 1;
-        checkCudaError(cudaHostAlloc((void **)&blocks, sizeof(block_t) * nblocks,cudaHostAllocMapped));
+        checkCudaError(cudaHostAlloc((void**)&blocks, sizeof(block_t) * nblocks, cudaHostAllocMapped));
 
         for (bid_t blk = 0; blk < nblocks; blk++)
         {
@@ -166,11 +167,14 @@ public:
             blocks[blk].nverts = vblocks[blk + 1] - vblocks[blk];
             blocks[blk].start_edge = eblocks[blk];
             blocks[blk].nedges = eblocks[blk + 1] - eblocks[blk];
+            if (blocks[blk].nverts == 1 && blocks[blk].nedges > maxedges) {
+                blocks[blk].nedges = maxedges;
+            }
             blocks[blk].status = INACTIVE;
         }
     }
 
-    block_t &operator[](bid_t blk)
+    block_t& operator[](bid_t blk)
     {
         assert(blk < nblocks);
         return blocks[blk];
@@ -205,7 +209,7 @@ public:
         assert(ncblock > 0);
         cache_blocks.resize(ncblock);
     }
-    cache_block &operator[](size_t index)
+    cache_block& operator[](size_t index)
     {
         assert(index < ncblock);
         return cache_blocks[index];

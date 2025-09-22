@@ -105,7 +105,7 @@ public:
       {
         bid_t choose_blk = block_score[0].first / nblocks;
         bid_t prev_index = block_score[0].first % nblocks;
-        buckets[prev_index] = choose_blk;
+        buckets[prev_index] = choose_blk;//零拷贝判断
         _m.stop_time("max_choose_blocks");
         return true;
       }
@@ -176,7 +176,7 @@ public:
     for (int i = 0; i < cache.ncblock; i++) {
       if (std::find(buckets.begin(), buckets.end(),
         cache.cache_blocks[i].block->blk) ==
-        buckets.end()) 
+        buckets.end())
       {
         cache.cache_blocks[i].block->cache_index = c_cache.ncblock;
         cache.cache_blocks[i].block->status = INACTIVE;
@@ -365,4 +365,269 @@ public:
   }
 };
 
+
+class SOwalker_scheduler_t : public scheduler {
+public:
+  std::vector<bid_t> bucket_sequences;
+  size_t scheduleblocks = 0;
+  SOwalker_scheduler_t(metrics& m) : scheduler(m) {
+  }
+
+  SOwalker_scheduler_t(std::vector<bid_t> copybuckets, metrics& m) : scheduler(m) {
+    buckets.resize(copybuckets.size());
+    std::copy(copybuckets.begin(), copybuckets.end(), buckets.begin());
+  }
+
+  bid_t posblk(int pos) { return buckets[pos]; }
+
+  bid_t cachesize() { return buckets.size(); }
+
+  eid_t copyblocks(graph_cache& cache, graph_cache& c_cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, int pos, cudaStream_t copy) {
+    eid_t load = 0;
+    cache.walk_blocks.clear();
+    std::vector<bid_t> cached;
+    bid_t choosed = buckets[pos];
+    for (int i = 0; i <= pos; i++) {
+      for (int j = 0; j <= pos; j++) {
+        bid_t blk = buckets[i] * c_cache.ncblock + buckets[j];
+        cache.walk_blocks.push_back(blk);
+      }
+    }
+    for (int i = 0; i < cache.ncblock; i++) {
+      if (cache.cache_blocks[i].block == NULL) {
+        cache.cache_blocks[i].block = c_cache.cache_blocks[choosed].block;
+        cache.cache_blocks[i].block->cache_index = i;
+        cache.cache_blocks[i].block->status = ACTIVE;
+        cache.cache_blocks[i].beg_pos = c_cache.cache_blocks[choosed].beg_pos;
+        cache.cache_blocks[i].csr = c_cache.cache_blocks[choosed].csr;
+        if (driver._weighted)
+          cache.cache_blocks[i].weights = c_cache.cache_blocks[choosed].weights;
+        copycachetogpu(g_cache, &cache, i, driver._weighted, copy);
+        pipeline_gpugraph(g_graph, cache.cache_blocks[i].block, copy);
+        load += cache.cache_blocks[i].block->nedges;
+        return load;
+      }
+      else if (cache.cache_blocks[i].block->blk == choosed) {
+        return load;
+      }
+      else {
+        cached.push_back(cache.cache_blocks[i].block->blk);
+      }
+    }
+    for (int i = 0; i < cache.ncblock; i++) {
+      if (std::find(buckets.begin(), buckets.end(),
+        cache.cache_blocks[i].block->blk) ==
+        buckets.end())
+      {
+        cache.cache_blocks[i].block->cache_index = c_cache.ncblock;
+        cache.cache_blocks[i].block->status = INACTIVE;
+        pipeline_gpugraph(g_graph, cache.cache_blocks[i].block, copy);
+        cache.cache_blocks[i].block = c_cache.cache_blocks[choosed].block;
+        cache.cache_blocks[i].block->cache_index = i;
+        cache.cache_blocks[i].block->status = ACTIVE;
+        cache.cache_blocks[i].beg_pos = c_cache.cache_blocks[choosed].beg_pos;
+        cache.cache_blocks[i].csr = c_cache.cache_blocks[choosed].csr;
+        if (driver._weighted)
+          cache.cache_blocks[i].weights = c_cache.cache_blocks[choosed].weights;
+        copycachetogpu(g_cache, &cache, i, driver._weighted, copy);
+        pipeline_gpugraph(g_graph, cache.cache_blocks[i].block, copy);
+        load += cache.cache_blocks[i].block->nedges;
+        return load;
+      }
+    }
+  }
+
+  int Combination(int n, int k)
+  {
+    if (k < 0 || k > n)
+    {
+      return 0;
+    }
+    int res = 1;
+    for (int i = 0; i < k; ++i)
+    {
+      res *= (n - i);
+      res /= (i + 1);
+    }
+    return res;
+  }
+
+  bool choose_blocks(graph_config& conf, graph_cache& cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, graph_cache& c_cache, metrics& _m)
+  {
+    std::unordered_set<bid_t> cache_blocks;
+    eid_t edgenum = 0;
+    for (bid_t blk = 0; blk < cache.ncblock; blk++)
+    {
+      if (cache.cache_blocks[blk].block != NULL)
+        cache_blocks.insert(cache.cache_blocks[blk].block->blk);
+    }
+
+    bid_t nblocks = walk_manager.nblocks;
+    std::vector<wid_t> block_walks(nblocks * nblocks);
+    for (bid_t blk = 0; blk < nblocks * nblocks; blk++)
+    {
+      block_walks[blk] = walk_manager.nblockwalks(blk);
+    }
+
+    std::vector<wid_t> partition_walks(nblocks, 0); // 收集每个block的walk数量
+    for (bid_t c_blk = 0; c_blk < nblocks; c_blk++)
+    {
+      for (bid_t p_blk = 0; p_blk < nblocks; p_blk++)
+      {
+        partition_walks[c_blk] += block_walks[p_blk * nblocks + c_blk];
+      }
+    }
+    auto cmp = [&partition_walks, &walk_manager](bid_t u, bid_t v)
+      {
+        return partition_walks[u] > partition_walks[v];
+      };
+    std::vector<bid_t> block_indexs(nblocks, 0);
+    std::iota(block_indexs.begin(), block_indexs.end(), 0);
+    std::sort(block_indexs.begin(), block_indexs.end(), cmp);
+
+    wid_t most_nwalks = 0;
+    bid_t best_index = cache.ncblock - 1;
+    for (bid_t p_index = cache.ncblock - 1; p_index < nblocks; p_index++)
+    {
+      wid_t nwalks = 0;
+      for (bid_t c_index = 0; c_index < cache.ncblock - 1; c_index++)
+      {
+        nwalks += block_walks[block_indexs[p_index] * nblocks + block_indexs[c_index]] + block_walks[block_indexs[c_index] * nblocks + block_indexs[p_index]];
+      }
+      if (nwalks > most_nwalks)
+      {
+        best_index = p_index;
+        most_nwalks = nwalks;
+      }
+    }
+    std::swap(block_indexs[cache.ncblock - 1], block_indexs[best_index]);
+    std::vector<bid_t> candidate_blocks(cache.ncblock);
+    for (bid_t blk = 0; blk < cache.ncblock; blk++)
+      candidate_blocks[blk] = block_indexs[blk];
+
+    auto cal_score = [&block_walks, &walk_manager, nblocks](const std::vector<bid_t>& blocks)
+      {
+        wid_t score = 0;
+        for (auto p_blk : blocks)
+        {
+          for (auto c_blk : blocks)
+          {
+            score += block_walks[p_blk * nblocks + c_blk];
+          }
+        }
+        return score;
+      };
+
+    size_t maxiter = Combination(walk_manager.nblocks, cache.ncblock);
+
+    if (cache.ncblock < nblocks)
+    {
+#ifdef TEMPERATURE_COOLING
+      real_t T = 100.0, alpha = 0.998;
+      real_t endT = 0.001;
+#endif
+      size_t iter = 0;
+      size_t can_comm = 0;
+      for (auto blk : candidate_blocks)
+        if (cache_blocks.find(blk) != cache_blocks.end())
+          can_comm++;
+      real_t y_can = cal_score(candidate_blocks) / (cache.ncblock - can_comm);
+
+      std::srand(std::time(nullptr));
+      while (iter < maxiter && T > endT)
+      {
+        std::vector<bid_t> tmp_blocks = candidate_blocks;
+        size_t pos = rand() % (nblocks - cache.ncblock) + cache.ncblock, tmp_pos = rand() % cache.ncblock;
+        std::swap(tmp_blocks[tmp_pos], block_indexs[pos]);
+        size_t tmp_comm = 0;
+        for (auto blk : tmp_blocks)
+          if (cache_blocks.find(blk) != cache_blocks.end())
+            tmp_comm++;
+        real_t y_tmp = 0.0;
+        if (tmp_comm < cache.ncblock)
+          y_tmp = cal_score(tmp_blocks) / (cache.ncblock - tmp_comm);
+
+        if (y_tmp > y_can)
+        {
+          candidate_blocks = tmp_blocks;
+          y_can = y_tmp;
+        }
+        else
+        {
+#ifdef TEMPERATURE_COOLING
+          real_t rand_val = static_cast<real_t>(std::rand()) / RAND_MAX;
+          real_t accept_prob = exp((y_tmp - y_can) / T);
+          if (y_tmp > 0 && rand_val < accept_prob)
+          {
+            candidate_blocks = tmp_blocks;
+            y_can = y_tmp;
+          }
+          else
+          {
+#endif
+            std::swap(tmp_blocks[tmp_pos], block_indexs[pos]);
+#ifdef TEMPERATURE_COOLING
+          }
+#endif
+        }
+#ifdef TEMPERATURE_COOLING
+        T = alpha * T; // cooling the temperature
+#endif
+        iter++;
+      }
+    }
+
+    buckets = candidate_blocks;
+    return true;
+  }
+
+  bool cpu_choose_blocks(graph_config& conf, graph_cache& cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, graph_cache& c_cache, metrics& _m)
+  {
+    cpu_blk.clear();
+    std::vector<bid_t> pre;
+    for (int f = 0;f < walk_manager.nblocks;f++)
+    {
+      for (int t = 0;t < walk_manager.nblocks;t++)
+      {
+
+        if (std::find(buckets.begin(), buckets.end(), f) != buckets.end() && std::find(buckets.begin(), buckets.end(), t) != buckets.end())
+        {
+          continue;
+        }
+        bid_t totblk = f * walk_manager.nblocks + t;
+        if (walk_manager.nblockwalks(totblk) > 0)
+        {
+          pre.push_back(totblk);
+        }
+      }
+    }
+    std::sort(pre.begin(), pre.end(), [&walk_manager](bid_t a, bid_t b) {return walk_manager.nblockwalks(a) < walk_manager.nblockwalks(b);});
+    if(pre.size()<=0)
+    {
+      return false;
+    }
+    if(pre[0]>0)
+    {
+      cpu_blk.push_back(pre[0]);
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+    
+  }
+
+  bool schedule(graph_config& conf, graph_cache& cache, graph_driver& driver, graph_walk& walk_manager, gpu_cache* g_cache, gpu_graph* g_graph, graph_cache& c_cache, cudaStream_t cstream, metrics& _m, cudaStream_t copy)
+  {
+    bool res = false;
+    res = choose_blocks(conf, cache, driver, walk_manager, g_cache, g_graph, c_cache, _m);
+    if(res)
+    {
+      cpu_choose_blocks(conf, cache, driver, walk_manager, g_cache, g_graph, c_cache, _m);
+    }
+    return res;
+  }
+
+};
 #endif

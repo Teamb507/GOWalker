@@ -54,6 +54,8 @@ int main(int argc, const char* argv[])
     bool gpu_schedule = get_option_bool("gpu");
     bool cpu_schedule = get_option_bool("cpu");
     bool walkaware = get_option_bool("walkaware");
+    bool GOWalker = get_option_bool("GOWalker");
+    bool SOWalker = get_option_bool("SOWalker");
     if (help_info)
     {
         std::cout << "- dataset:       the dataset path" << std::endl;
@@ -98,7 +100,7 @@ int main(int argc, const char* argv[])
     }
     if (zero)
     {
-        zero_threshold = blocksize_MB * (1024 * 1024) / 128 / 4;
+        zero_threshold = blocksize_MB * (1024 * 1024) / 128 / 24;
         logstream(LOG_INFO) << "zero_threshold = " << zero_threshold << std::endl;
     }
     else
@@ -154,6 +156,18 @@ int main(int argc, const char* argv[])
     graph_driver driver(&conf, m);
     graph_walk walk_mangager(conf, driver, blocks);
     scheduler* walk_scheduler;
+    if (GOWalker && !SOWalker) {
+        walk_scheduler = new GOwalker_scheduler_t(m);
+        logstream(LOG_INFO) << "Using GOWalker scheduler!" << std::endl;
+    }
+    else if (!GOWalker && SOWalker) {
+        walk_scheduler = new SOwalker_scheduler_t(m);
+        logstream(LOG_INFO) << "Using SOWalker scheduler!" << std::endl;
+    }
+    else {
+        std::cout << "Please select one walker from GOWalker and SOWalker!" << std::endl;
+        exit(0);
+    }
     walk_scheduler = new GOwalker_scheduler_t(m);
     bid_t nmblocks = conf.cache_size / conf.blocksize;
     graph_cache cache(blocks.nblocks, blocksize_MB * (1024 * 1024));

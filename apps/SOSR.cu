@@ -2,7 +2,7 @@
 #include <functional>
 #include <iostream>
 #include <fstream>
-
+#include "api/types.hpp"
 #include "api/constants.hpp"
 #include "engine/config.hpp"
 #include "engine/cache.hpp"
@@ -49,14 +49,13 @@ int main(int argc, const char* argv[])
     size_t nthreads = get_option_int("nthreads", 70);
     size_t cpu_threads = get_option_int("cpu_threads", 32);
     wid_t walk_batch = get_option_int("walk_batch", 4096);
-    wid_t zero_threshold = get_option_float("zero_threshold", 2097152);
+    wid_t zero_threshold = get_option_float("zero_threshold", 0);
     bool zero = get_option_bool("zero");
-    bool sa = get_option_bool("sa");
     bool gpu_schedule = get_option_bool("gpu");
     bool cpu_schedule = get_option_bool("cpu");
     bool walkaware = get_option_bool("walkaware");
-    bool GOWalker=get_option_bool("GOWalker");
-    bool SOWalker=get_option_bool("SOWalker");
+    bool GOWalker = get_option_bool("GOWalker");
+    bool SOWalker = get_option_bool("SOWalker");
     if (help_info)
     {
         std::cout << "- dataset:       the dataset path" << std::endl;
@@ -65,6 +64,7 @@ int main(int argc, const char* argv[])
         std::cout << "- skip:          whether to skip preprocessing" << std::endl;
         std::cout << "- blocksize_MB:     the size of each block" << std::endl;
         std::cout << "- nthreads:      the number of threads to walk" << std::endl;
+        std::cout << "- dynamic:       whether the blocksize is dynamic, according to the number of walks" << std::endl;
         std::cout << "- memory_size:   the size(GB) of memory" << std::endl;
         std::cout << "- max_iter:      the maximum number of iteration for simulated annealing scheduler" << std::endl;
         std::cout << "- walkpersource: the number of walks for each vertex" << std::endl;
@@ -79,6 +79,7 @@ int main(int argc, const char* argv[])
     auto static_query_blocksize = [blocksize_MB](vid_t nvertices)
         { return blocksize_MB * (1024 * 1024); };
     std::function<size_t(vid_t nvertices)> query_blocksize;
+
     query_blocksize = static_query_blocksize;
 
     graph_converter converter(remove_extension(argv[1]), weighted, sorted);
@@ -121,7 +122,7 @@ int main(int argc, const char* argv[])
         blockpergrid,
         threadperblock,
         cpu_threads,
-        node2vec,
+        SOSR,
         p,
         q,
         alpha,
@@ -134,7 +135,7 @@ int main(int argc, const char* argv[])
         walkaware
     };
 
-    metrics m("node2vec_numwalks_" + std::to_string(conf.numwalks) + "_steps_" + std::to_string(steps) + "_dataset_" + argv[1]+"_schedule_" + (GOWalker?"GOWalker":"")+(SOWalker?"SOWalker":""));
+    metrics m("SOPR_numwalks_" + std::to_string(conf.numwalks) + "_steps_" + std::to_string(steps) + "_dataset_" + argv[1]);
     if (gpu_schedule)
     {
         m.set("gpu_schedule", 1);
@@ -153,20 +154,21 @@ int main(int argc, const char* argv[])
     }
     graph_block blocks(&conf);
     graph_driver driver(&conf, m);
+    graph_walk walk_mangager(conf, driver, blocks);
     scheduler* walk_scheduler;
-    if(GOWalker&&!SOWalker){
+    if (GOWalker && !SOWalker) {
         walk_scheduler = new GOwalker_scheduler_t(m);
         logstream(LOG_INFO) << "Using GOWalker scheduler!" << std::endl;
     }
-    else if(!GOWalker&&SOWalker){
+    else if (!GOWalker && SOWalker) {
         walk_scheduler = new SOwalker_scheduler_t(m);
         logstream(LOG_INFO) << "Using SOWalker scheduler!" << std::endl;
     }
-    else{
-        std::cout<<"Please select one walker from GOWalker and SOWalker!"<<std::endl;
+    else {
+        std::cout << "Please select one walker from GOWalker and SOWalker!" << std::endl;
         exit(0);
     }
-    graph_walk walk_mangager(conf, driver, blocks);
+    walk_scheduler = new GOwalker_scheduler_t(m);
     bid_t nmblocks = conf.cache_size / conf.blocksize;
     graph_cache cache(blocks.nblocks, blocksize_MB * (1024 * 1024));
     graph_cache g_cache(nmblocks, blocksize_MB * (1024 * 1024));

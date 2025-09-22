@@ -29,8 +29,8 @@ public:
     int get_desc() const { return desc; }
 };
 
-__global__ void generatewalks(size_t walkpersource, vid_t minnode, vid_t numnode, walker_t* walks, bid_t blk)
-{
+__global__ void Node2vec_generatewalks(size_t walkpersource, vid_t minnode, vid_t numnode, walker_t* walks, bid_t blk, wid_t id)
+{//generate some walks per source
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
     if (tid < numnode)
     {
@@ -42,8 +42,39 @@ __global__ void generatewalks(size_t walkpersource, vid_t minnode, vid_t numnode
             walks[tid * walkpersource + i].cur_index = blk;
             walks[tid * walkpersource + i].prev_index = blk;
             walks[tid * walkpersource + i].hop = 0;
-            walks[tid * walkpersource + i].id = (minnode + tid) * walkpersource + i;
+            walks[tid * walkpersource + i].id = id + tid * walkpersource + i;
         }
+    }
+    return;
+}
+__global__ void walkrand(curandState* states, uint64_t seed)
+{
+   int tid = blockDim.x * blockIdx.x + threadIdx.x;
+   curand_init(seed, tid, 0, &states[tid]);
+}
+curandState* generaterand(int blockdim, int threadperblock, cudaStream_t stream)
+{
+   curandState* states;
+   std::chrono::nanoseconds time;
+   auto seed = time.count();
+   checkCudaError(cudaMallocAsync(&states, sizeof(curandState) * blockdim * threadperblock, stream));
+   walkrand << <blockdim, threadperblock, 0, stream >> > (states, seed);
+   return states;
+}
+__global__ void Node2vec_num_generatewalks(size_t numwalks, vid_t minnode, vid_t numnode, walker_t* walks, bid_t blk, wid_t id, curandState* states)
+{//generate some walks rand to numwalks
+    int tid = blockDim.x * blockIdx.x + threadIdx.x;
+    curandState seed = states[tid];
+    for (int i = tid;i < numwalks;i += gridDim.x * blockDim.x)
+    {
+        int rand_val = curand_uniform(&seed) * numnode;
+        walks[i].source = minnode + rand_val;
+        walks[i].current = minnode + rand_val;
+        walks[i].previous = minnode + rand_val;
+        walks[i].cur_index = blk;
+        walks[i].prev_index = blk;
+        walks[i].hop = 0;
+        walks[i].id = id + i;
     }
     return;
 }
@@ -189,8 +220,8 @@ public:
     tid_t nthreads;
     std::mutex forbid_mtx;
     std::vector<bid_t> forbid;
-    graph_buffer<walker_t>* g_walks; 
-    graph_buffer<walker_t>* c_walks; 
+    graph_buffer<walker_t>* g_walks;
+    graph_buffer<walker_t>* c_walks;
     walk_block* block_walks;
     graph_buffer<walker_t>** cpu_walkbuffer;
     graph_block* global_blocks;
@@ -237,54 +268,54 @@ public:
         load += block_walks[blk].insert(1, gpuwalks, numwalks, stream);
         return load;
     }
+
     wid_t gpu_createwalk(size_t walkpersource, size_t numwalks, graph_config* conf, cudaStream_t stream)
     {
         walker_t* gpuwalks;
         if (conf->algorithm == SOPR)
         {
-            std::cout<<"SOPR create walks!"<<std::endl;
-            if (walkpersource > 0)
+            std::cout << "SOPR create walks!" << std::endl;
+            checkCudaError(cudaMallocAsync((void**)&gpuwalks, sizeof(walker_t) * cpu_batch * walkpersource, stream));
+            size_t numwalks = conf->numwalks;
+            size_t maxbatch = cpu_batch;
+            size_t num = 0;
+            while (num + maxbatch < numwalks)
             {
-                checkCudaError(cudaMallocAsync((void**)&gpuwalks, sizeof(walker_t) * cpu_batch * walkpersource, stream));
-                size_t numwalks = conf->numwalks;
-                size_t maxbatch = cpu_batch;
-                size_t num = 0;
-                while (num + maxbatch < numwalks)
-                {
-                    SOPR_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, maxbatch, num, gpuwalks, 0);
-                    num += maxbatch;
-                    gpuinsertbatchwalk(gpuwalks, maxbatch, 0, stream);
-                }
-                if (num < numwalks)
-                {
-                    SOPR_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, numwalks - num, num, gpuwalks, 0);
-                    gpuinsertbatchwalk(gpuwalks, numwalks - num, 0, stream);
-                }
-
+                SOPR_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, maxbatch, num, gpuwalks, 0);
+                num += maxbatch;
+                gpuinsertbatchwalk(gpuwalks, maxbatch, 0, stream);
+            }
+            if (num < numwalks)
+            {
+                SOPR_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, numwalks - num, num, gpuwalks, 0);
+                gpuinsertbatchwalk(gpuwalks, numwalks - num, 0, stream);
             }
         }
-        else {
+        else if (conf->algorithm == node2vec) {
             if (walkpersource > 0)
             {
                 checkCudaError(cudaMallocAsync((void**)&gpuwalks, sizeof(walker_t) * cpu_batch * walkpersource, stream));
                 size_t maxbatch = cpu_batch;
                 vid_t minnode = 0;
                 vid_t maxnode = 0;
+                wid_t id = 0;
                 for (bid_t blk = 0; blk < nblocks; blk++)
                 {
                     size_t num = 0;
                     minnode = global_blocks->blocks[blk].start_vert;
                     while (num + maxbatch < global_blocks->blocks[blk].nverts)
                     {
-                        generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (walkpersource, minnode, maxbatch, gpuwalks, blk);
+                        Node2vec_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (walkpersource, minnode, maxbatch, gpuwalks, blk, id);
                         num += maxbatch;
                         minnode += maxbatch;
+                        id += maxbatch * walkpersource;
                         gpuinsertbatchwalk(gpuwalks, maxbatch * walkpersource, blk * nblocks + blk, stream);
                     }
                     if (num < global_blocks->blocks[blk].nverts)
                     {
-                        generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (walkpersource, minnode, (global_blocks->blocks[blk].nverts - num), gpuwalks, blk);
+                        Node2vec_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (walkpersource, minnode, (global_blocks->blocks[blk].nverts - num), gpuwalks, blk, id);
                         gpuinsertbatchwalk(gpuwalks, (global_blocks->blocks[blk].nverts - num) * walkpersource, blk * nblocks + blk, stream);
+                        id += (global_blocks->blocks[blk].nverts - num) * walkpersource;
                     }
                 }
             }
@@ -295,6 +326,7 @@ public:
                 vid_t minnode = 0;
                 vid_t maxnode = 0;
                 wid_t generated = 0;
+                curandState* seed = generaterand(conf->blockpergrid, conf->threadperblock, stream);
                 while (generated < numwalks)
                 {
                     for (bid_t blk = 0; blk < nblocks; blk++)
@@ -305,18 +337,50 @@ public:
                         minnode = global_blocks->blocks[blk].start_vert + rand() % 1000;
                         if (generated + batch < numwalks)
                         {
-                            generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, minnode, batch, gpuwalks, blk);
+                            Node2vec_num_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, minnode, batch, gpuwalks, blk, generated, seed);
                             gpuinsertbatchwalk(gpuwalks, batch, blk * nblocks + blk, stream);
                             generated += batch;
                         }
                         else if (generated < numwalks)
                         {
-                            generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, minnode, numwalks - generated, gpuwalks, blk);
+                            Node2vec_num_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, minnode, numwalks - generated, gpuwalks, blk, generated, seed);
                             gpuinsertbatchwalk(gpuwalks, numwalks - generated, blk * nblocks + blk, stream);
                             generated += (numwalks - generated);
                         }
                     }
                 }
+                cudaFreeAsync(seed, stream);
+            }
+        }
+        else if (conf->algorithm == SOSR) {
+            std::cout << "SOSR create walks!" << std::endl;
+            checkCudaError(cudaMallocAsync((void**)&gpuwalks, sizeof(walker_t) * cpu_batch * walkpersource, stream));
+            size_t numwalks1 = conf->numwalks/2;
+            size_t numwalks2 = conf->numwalks - numwalks1;
+            size_t maxbatch = cpu_batch;
+            size_t num = 0;
+            size_t num2=0;
+            while (num + maxbatch < numwalks1)
+            {
+                SOPR_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, maxbatch, num, gpuwalks, 0);
+                num += maxbatch;
+                gpuinsertbatchwalk(gpuwalks, maxbatch, 0, stream);
+            }
+            if (num < numwalks1)
+            {
+                SOPR_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (1, numwalks1 - num, num, gpuwalks, 0);
+                gpuinsertbatchwalk(gpuwalks, numwalks1 - num, 0, stream);
+            }
+            while (num2 + maxbatch < numwalks2)
+            {
+                SOPR_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (3, maxbatch, num+num2, gpuwalks, 0);
+                num2 += maxbatch;
+                gpuinsertbatchwalk(gpuwalks, maxbatch, 0, stream);
+            }
+            if (num2 < numwalks2)
+            {
+                SOPR_generatewalks << <conf->blockpergrid, conf->threadperblock, 0, stream >> > (3, numwalks2 - num2, num+num2, gpuwalks, 0);
+                gpuinsertbatchwalk(gpuwalks, numwalks2 - num2, 0, stream);
             }
         }
         cudaStreamSynchronize(stream);
@@ -328,13 +392,15 @@ public:
     {
         return block_walks[blk].insert(0, cpuwalks, numwalks, 0);
     }
+
     wid_t nblockwalks(bid_t blk)
     {
         wid_t walksum = 0;
         walksum = block_walks[blk].block_numwalks();
         return walksum;
     }
-    wid_t nwalks() 
+
+    wid_t nwalks()
     {
         wid_t walksum = 0;
         for (bid_t blk = 0; blk < totblocks; blk++)
@@ -344,10 +410,12 @@ public:
         }
         return walksum;
     }
+
     bool test_finished_walks()
     {
         return this->nwalks() == 0;
     }
+
 
     wid_t zerocopywalktogpu(bid_t blk)
     {

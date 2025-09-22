@@ -16,19 +16,19 @@ class graph_driver
 {
 public:
     int vertdesc, edgedesc, degdesc, whtdesc; /* the beg_pos, csr, degree file descriptor */
-    metrics &_m;
+    metrics& _m;
     bool _weighted;
-    graph_driver(graph_config *conf, metrics &m) : _m(m)
+    graph_driver(graph_config* conf, metrics& m) : _m(m)
     {
         vertdesc = edgedesc = whtdesc = 0;
         this->setup(conf);
     }
 
-    graph_driver(metrics &m) : _m(m)
+    graph_driver(metrics& m) : _m(m)
     {
         vertdesc = edgedesc = whtdesc = 0;
     }
-    void setup(graph_config *conf)
+    void setup(graph_config* conf)
     {
         this->destory();
         std::string beg_pos_name = get_beg_pos_name(conf->base_name);
@@ -44,31 +44,36 @@ public:
         }
     }
 
-    void load_block_info(graph_cache &cache, graph_block *global_blocks, bid_t cache_index, bid_t block_index)
+    void load_block_info(graph_cache& cache, graph_block* global_blocks, bid_t cache_index, bid_t block_index)
     {
         cache.cache_blocks[cache_index].block = &global_blocks->blocks[block_index];
         cache.cache_blocks[cache_index].block->status = ACTIVE;
         cache.cache_blocks[cache_index].block->cache_index = cache_index;
 
-        cache.cache_blocks[cache_index].beg_pos = (eid_t *)realloc(cache.cache_blocks[cache_index].beg_pos, (global_blocks->blocks[block_index].nverts + 1) * sizeof(eid_t));
+        cache.cache_blocks[cache_index].beg_pos = (eid_t*)realloc(cache.cache_blocks[cache_index].beg_pos, (global_blocks->blocks[block_index].nverts + 1) * sizeof(eid_t));
         load_block_vertex(vertdesc, cache.cache_blocks[cache_index].beg_pos, global_blocks->blocks[block_index]);
         load_block_edge(edgedesc, cache.cache_blocks[cache_index].csr, global_blocks->blocks[block_index]);
 #ifdef IO_UTE
         logstream(LOG_INFO) << "Current load block is " << block_index << "; nedges is: " << global_blocks->blocks[block_index].nedges << std::endl;
 #endif
+        if (cache.cache_blocks[cache_index].block->nverts == 1)
+        {
+            cache.cache_blocks[cache_index].beg_pos[1] = cache.cache_blocks[cache_index].block->nedges + cache.cache_blocks[cache_index].beg_pos[0];
+        }
+        std::cout << "(" << cache.cache_blocks[cache_index].beg_pos[0] << " " << cache.cache_blocks[cache_index].beg_pos[1] << ")" << std::endl;
         if (_weighted)
         {
-            cache.cache_blocks[cache_index].weights = (real_t *)realloc(cache.cache_blocks[cache_index].weights, global_blocks->blocks[block_index].nedges * sizeof(real_t));
+            cache.cache_blocks[cache_index].weights = (real_t*)realloc(cache.cache_blocks[cache_index].weights, global_blocks->blocks[block_index].nedges * sizeof(real_t));
             load_block_weight(whtdesc, cache.cache_blocks[cache_index].weights, global_blocks->blocks[block_index]);
         }
     }
 
-    void load_block_info_all(graph_cache &cache, graph_block *global_blocks, bid_t cache_index, bid_t block_index,size_t blocksize)
+    void load_block_info_all(graph_cache& cache, graph_block* global_blocks, bid_t cache_index, bid_t block_index, size_t blocksize)
     {
         cache.cache_blocks[cache_index].block = &global_blocks->blocks[block_index];
         cache.cache_blocks[cache_index].block->status = INACTIVE;
         cache.cache_blocks[cache_index].block->cache_index = global_blocks->nblocks;
-        cache.cache_blocks[cache_index].cudamalloc(_weighted,blocksize);
+        cache.cache_blocks[cache_index].cudamalloc(_weighted, blocksize);
         load_block_vertex(vertdesc, cache.cache_blocks[cache_index].beg_pos, global_blocks->blocks[block_index]);
         load_block_edge(edgedesc, cache.cache_blocks[cache_index].csr, global_blocks->blocks[block_index]);
 #ifdef IO_UTE
@@ -77,7 +82,8 @@ public:
         if (_weighted)
         {
             load_block_weight(whtdesc, cache.cache_blocks[cache_index].weights, global_blocks->blocks[block_index]);
-        }else
+        }
+        else
         {
             cache.cache_blocks[cache_index].weights = NULL;
         }
@@ -96,31 +102,31 @@ public:
         }
     }
 
-    void load_block_vertex(int fd, eid_t *buf, const block_t &block)
+    void load_block_vertex(int fd, eid_t* buf, const block_t& block)
     {
         load_block_range(fd, buf, block.nverts + 1, block.start_vert * sizeof(eid_t));
     }
-    void load_block_degree(int fd, vid_t *buf, const block_t &block)
+    void load_block_degree(int fd, vid_t* buf, const block_t& block)
     {
         load_block_range(fd, buf, block.nverts, block.start_vert * sizeof(vid_t));
     }
 
-    void load_block_edge(int fd, vid_t *buf, const block_t &block)
+    void load_block_edge(int fd, vid_t* buf, const block_t& block)
     {
         load_block_range(fd, buf, block.nedges, block.start_edge * sizeof(vid_t));
     }
 
-    void load_block_weight(int fd, real_t *buf, const block_t &block)
+    void load_block_weight(int fd, real_t* buf, const block_t& block)
     {
         load_block_range(fd, buf, block.nedges, block.start_edge * sizeof(real_t));
     }
 
-    void load_block_prob(int fd, real_t *buf, const block_t &block)
+    void load_block_prob(int fd, real_t* buf, const block_t& block)
     {
         load_block_range(fd, buf, block.nedges, block.start_edge * sizeof(real_t));
     }
 
-    void load_block_alias(int fd, vid_t *buf, const block_t &block)
+    void load_block_alias(int fd, vid_t* buf, const block_t& block)
     {
         load_block_range(fd, buf, block.nedges, block.start_edge * sizeof(vid_t));
     }
